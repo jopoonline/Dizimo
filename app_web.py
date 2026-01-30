@@ -1,5 +1,5 @@
 import streamlit as st
-import pd as pd
+import pandas as pd  # Corrigido aqui
 import plotly.express as px
 import os
 import calendar
@@ -41,18 +41,15 @@ CORES_AZYK = {"ME": "#00D4FF", "FA": "#0072FF", "VI": "#00C6FF"}
 
 meses_map = {m: list(calendar.month_name)[i+1] for i, m in enumerate(MESES_ORDEM)}
 
-# REMOVIDO @st.cache_data PARA PERMITIR ATUALIZAÇÃO EM TEMPO REAL
 def carregar_dizimos():
     if os.path.exists(ARQUIVO_DIZIMOS): 
         return pd.read_csv(ARQUIVO_DIZIMOS)
-    # Criar DataFrame inicial se não existir
-    df_init = pd.DataFrame({
+    return pd.DataFrame({
         "Mês": [m for m in MESES_ORDEM[:7] for _ in range(25)], 
         "Líder": [f"Líder {i:02d}" for i in range(1, 26)] * 7, 
         "Valor": 0.0, 
         "Pago": "Não"
     })
-    return df_init
 
 @st.cache_data
 def inicializar_frequencia():
@@ -71,7 +68,6 @@ def obter_sabados_do_mes(mes_nome, ano=2026):
     cal = calendar.monthcalendar(ano, mes_num)
     return [f"{semana[calendar.SATURDAY]:02d}/{mes_num:02d}" for semana in cal if semana[calendar.SATURDAY] != 0]
 
-# Carregar dados para o estado da sessão
 if 'df' not in st.session_state: 
     st.session_state.df = carregar_dizimos()
 if 'df_freq' not in st.session_state: 
@@ -90,7 +86,7 @@ if is_admin:
 else:
     tab1, tab2 = st.tabs(["📄 Relatório de Frequência", "📊 Visão Geral de Dízimo"])
 
-# --- ABA 1: FREQUÊNCIA (ORIGINAL) ---
+# --- ABA 1: FREQUÊNCIA (RESTAURADA ORIGINAL) ---
 with tab1:
     col_f1, col_f2 = st.columns([2, 1])
     with col_f1: mes_sel = st.selectbox("📅 Selecione o Mês:", MESES_ORDEM, key="f_mes")
@@ -149,7 +145,6 @@ with tab1:
 
 # --- ABA 2: VISÃO GERAL DÍZIMO ---
 with tab2:
-    # Sempre ler os dados mais recentes do session_state
     df_pago = st.session_state.df[st.session_state.df["Pago"] == "Sim"]
     st.markdown(f'<div class="dizimo-destaque"><p class="dizimo-titulo">💰 Total Acumulado Dízimos (Jan a Jul)</p><p class="dizimo-valor">{formatar_brl(df_pago["Valor"].sum())}</p></div>', unsafe_allow_html=True)
     c1, c2 = st.columns([2, 1])
@@ -163,11 +158,10 @@ with tab2:
         m_v = st.selectbox("Status Mensal:", MESES_ORDEM[:7], key="v_diz")
         st.plotly_chart(px.pie(st.session_state.df[st.session_state.df["Mês"] == m_v], names='Pago', hole=0.5, color_discrete_map={'Sim': '#00D4FF', 'Não': '#e74c3c'}), use_container_width=True)
 
-# --- ABA 3: LANÇAMENTOS ---
+# --- ABA 3: LANÇAMENTOS (CADASTRO / EXCLUSÃO / EDIÇÃO) ---
 if is_admin:
     with tab3:
         col_cad, col_exclui = st.columns(2)
-        
         with col_cad:
             st.markdown("### ➕ Cadastrar Novo Líder")
             with st.form("form_novo_lider", clear_on_submit=True):
@@ -177,15 +171,12 @@ if is_admin:
                         novas = pd.DataFrame([{"Mês": m, "Líder": novo_nome, "Valor": 0.0, "Pago": "Não"} for m in MESES_ORDEM[:7]])
                         st.session_state.df = pd.concat([st.session_state.df, novas], ignore_index=True)
                         st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
-                        st.success(f"Adicionado: {novo_nome}")
-                        st.rerun()
-        
+                        st.success(f"Adicionado: {novo_nome}"); st.rerun()
         with col_exclui:
             st.markdown("### 🗑️ Excluir Líder")
             todos_lideres = sorted(st.session_state.df["Líder"].unique())
             lider_para_excluir = st.selectbox("Selecione para remover:", [""] + todos_lideres)
             confirmou = st.checkbox("Confirmar exclusão permanente")
-            
             if st.button("❌ Excluir", type="primary", disabled=not (confirmou and lider_para_excluir != "")):
                 st.session_state.df = st.session_state.df[st.session_state.df["Líder"] != lider_para_excluir]
                 st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
@@ -194,10 +185,7 @@ if is_admin:
         st.markdown("---")
         st.markdown("### 📝 Lançar Valores")
         m_l = st.selectbox("Mês de Trabalho:", MESES_ORDEM[:7], key="l_diz")
-        
-        # Pega a fatia do DataFrame para o editor
         df_edicao = st.session_state.df[st.session_state.df["Mês"] == m_l].copy()
-        
         df_editado = st.data_editor(df_edicao, use_container_width=True, hide_index=True,
             column_config={
                 "Mês": st.column_config.Column(disabled=True),
@@ -205,11 +193,8 @@ if is_admin:
                 "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f"),
                 "Pago": st.column_config.SelectboxColumn("Status", options=["Sim", "Não"])
             })
-        
         if st.button("💾 Salvar Lançamentos"):
-            # Atualizar os dados de volta no session_state usando o índice original
             outros_meses = st.session_state.df[st.session_state.df["Mês"] != m_l]
             st.session_state.df = pd.concat([outros_meses, df_editado], ignore_index=True)
             st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
-            st.success("Dados salvos com sucesso!")
-            st.rerun()
+            st.success("Dados salvos!"); st.rerun()
