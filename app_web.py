@@ -1,5 +1,5 @@
 import streamlit as st
-import pandas as pd  # Corrigido aqui
+import pandas as pd
 import plotly.express as px
 import os
 import calendar
@@ -41,17 +41,11 @@ CORES_AZYK = {"ME": "#00D4FF", "FA": "#0072FF", "VI": "#00C6FF"}
 
 meses_map = {m: list(calendar.month_name)[i+1] for i, m in enumerate(MESES_ORDEM)}
 
-def carregar_dizimos():
-    if os.path.exists(ARQUIVO_DIZIMOS): 
-        return pd.read_csv(ARQUIVO_DIZIMOS)
-    return pd.DataFrame({
-        "Mês": [m for m in MESES_ORDEM[:7] for _ in range(25)], 
-        "Líder": [f"Líder {i:02d}" for i in range(1, 26)] * 7, 
-        "Valor": 0.0, 
-        "Pago": "Não"
-    })
-
 @st.cache_data
+def carregar_dizimos():
+    if os.path.exists(ARQUIVO_DIZIMOS): return pd.read_csv(ARQUIVO_DIZIMOS)
+    return pd.DataFrame({"Mês": [m for m in MESES_ORDEM[:7] for _ in range(25)], "Líder": [f"Líder {i:02d}" for i in range(1, 26)] * 7, "Valor": 0.0, "Pago": "Não"})
+
 def inicializar_frequencia():
     if os.path.exists(ARQUIVO_FREQ): return pd.read_csv(ARQUIVO_FREQ)
     data = []
@@ -68,10 +62,8 @@ def obter_sabados_do_mes(mes_nome, ano=2026):
     cal = calendar.monthcalendar(ano, mes_num)
     return [f"{semana[calendar.SATURDAY]:02d}/{mes_num:02d}" for semana in cal if semana[calendar.SATURDAY] != 0]
 
-if 'df' not in st.session_state: 
-    st.session_state.df = carregar_dizimos()
-if 'df_freq' not in st.session_state: 
-    st.session_state.df_freq = inicializar_frequencia()
+if 'df' not in st.session_state: st.session_state.df = carregar_dizimos()
+if 'df_freq' not in st.session_state: st.session_state.df_freq = inicializar_frequencia()
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -162,6 +154,7 @@ with tab2:
 if is_admin:
     with tab3:
         col_cad, col_exclui = st.columns(2)
+        
         with col_cad:
             st.markdown("### ➕ Cadastrar Novo Líder")
             with st.form("form_novo_lider", clear_on_submit=True):
@@ -172,20 +165,24 @@ if is_admin:
                         st.session_state.df = pd.concat([st.session_state.df, novas], ignore_index=True)
                         st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
                         st.success(f"Adicionado: {novo_nome}"); st.rerun()
+        
         with col_exclui:
             st.markdown("### 🗑️ Excluir Líder")
             todos_lideres = sorted(st.session_state.df["Líder"].unique())
             lider_para_excluir = st.selectbox("Selecione para remover:", [""] + todos_lideres)
-            confirmou = st.checkbox("Confirmar exclusão permanente")
-            if st.button("❌ Excluir", type="primary", disabled=not (confirmou and lider_para_excluir != "")):
+            
+            confirmou = st.checkbox(f"Estou ciente que excluir '{lider_para_excluir}' apagará todos os seus registros de Jan a Jul.")
+            
+            if st.button("❌ Excluir Permanentemente", type="primary", disabled=not (confirmou and lider_para_excluir != "")):
                 st.session_state.df = st.session_state.df[st.session_state.df["Líder"] != lider_para_excluir]
                 st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
-                st.success(f"Removido!"); st.rerun()
+                st.success(f"Líder {lider_para_excluir} removido!"); st.rerun()
         
         st.markdown("---")
         st.markdown("### 📝 Lançar Valores")
         m_l = st.selectbox("Mês de Trabalho:", MESES_ORDEM[:7], key="l_diz")
         df_edicao = st.session_state.df[st.session_state.df["Mês"] == m_l].copy()
+        
         df_editado = st.data_editor(df_edicao, use_container_width=True, hide_index=True,
             column_config={
                 "Mês": st.column_config.Column(disabled=True),
@@ -193,8 +190,8 @@ if is_admin:
                 "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f"),
                 "Pago": st.column_config.SelectboxColumn("Status", options=["Sim", "Não"])
             })
+        
         if st.button("💾 Salvar Lançamentos"):
-            outros_meses = st.session_state.df[st.session_state.df["Mês"] != m_l]
-            st.session_state.df = pd.concat([outros_meses, df_editado], ignore_index=True)
-            st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
-            st.success("Dados salvos!"); st.rerun()
+            idx_mes = st.session_state.df[st.session_state.df["Mês"] == m_l].index
+            st.session_state.df.loc[idx_mes, ["Valor", "Pago"]] = df_editado[["Valor", "Pago"]].values
+            st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False); st.success("Dados salvos!"); st.rerun()
