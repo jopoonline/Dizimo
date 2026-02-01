@@ -8,13 +8,9 @@ from datetime import datetime
 # 1. CONFIGURAÇÃO DA PÁGINA
 st.set_page_config(page_title="Radicais Livres 2026", layout="wide", page_icon="⛪")
 
-# --- FUNÇÃO DE FORMATAÇÃO ---
-def formatar_brl(valor):
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-# --- ESTILO CSS PREMIUM ---
+# --- ESTILO CSS (Escrito de forma a evitar erros de tokenização) ---
 st.markdown("""
-    <style>
+<style>
     .stApp { background-color: #0F172A; color: #F8FAFC; }
     .metric-card {
         background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
@@ -40,8 +36,12 @@ st.markdown("""
         background-color: #450a0a; border: 1px solid #dc2626;
         padding: 15px; border-radius: 10px; color: #fecaca; margin-bottom: 15px;
     }
-    </style>
-    """, unsafe_allow_html=True)
+</style>
+""", unsafe_allow_html=True)
+
+# --- FUNÇÕES AUXILIARES ---
+def formatar_brl(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # --- CONFIGURAÇÕES E DADOS ---
 ARQUIVO_DIZIMOS = "dados_dizimos.csv"
@@ -55,8 +55,9 @@ meses_map = {m: list(calendar.month_name)[i+1] for i, m in enumerate(MESES_ORDEM
 mes_atual_numero = datetime.now().month
 
 @st.cache_data
-def carregar_dizimos():
-    if os.path.exists(ARQUIVO_DIZIMOS): return pd.read_csv(ARQUIVO_DIZIMOS)
+def carregar_dizimos_inicial():
+    if os.path.exists(ARQUIVO_DIZIMOS):
+        return pd.read_csv(ARQUIVO_DIZIMOS)
     lideres_padrao = [f"Líder {i:02d}" for i in range(1, 26)]
     data = []
     for m in MESES_ORDEM[:7]:
@@ -65,20 +66,27 @@ def carregar_dizimos():
     return pd.DataFrame(data)
 
 def inicializar_frequencia():
-    if os.path.exists(ARQUIVO_FREQ): return pd.read_csv(ARQUIVO_FREQ)
+    if os.path.exists(ARQUIVO_FREQ):
+        return pd.read_csv(ARQUIVO_FREQ)
     data = []
     for mes in MESES_ORDEM:
         for discipulador in DISCIPULADORES:
             for tipo in TIPOS:
                 row = {"Mês": mes, "Discipulador": discipulador, "Tipo": tipo}
-                for i in range(1, 6): row[f"S{i}_ME"] = 0; row[f"S{i}_FA"] = 0; row[f"S{i}_VI"] = 0
+                for i in range(1, 6):
+                    row[f"S{i}_ME"] = 0
+                    row[f"S{i}_FA"] = 0
+                    row[f"S{i}_VI"] = 0
                 data.append(row)
     df = pd.DataFrame(data)
     df.to_csv(ARQUIVO_FREQ, index=False)
     return df
 
-if 'df' not in st.session_state: st.session_state.df = carregar_dizimos()
-if 'df_freq' not in st.session_state: st.session_state.df_freq = inicializar_frequencia()
+# Inicialização do estado
+if 'df' not in st.session_state:
+    st.session_state.df = carregar_dizimos_inicial()
+if 'df_freq' not in st.session_state:
+    st.session_state.df_freq = inicializar_frequencia()
 
 def obter_sabados_do_mes(mes_nome, ano=2026):
     mes_num = list(calendar.month_name).index(meses_map[mes_nome])
@@ -93,6 +101,7 @@ with st.sidebar:
 
 st.markdown('<p class="main-title">⛪ RADICAIS LIVRES 2026</p>', unsafe_allow_html=True)
 
+# Define abas
 if is_admin:
     tab1, tab2, tab3 = st.tabs(["📊 Frequência", "💰 Finanças", "⚙️ Admin"])
 else:
@@ -109,7 +118,6 @@ with tab1:
     sabados = obter_sabados_do_mes(mes_sel)
     n_sab = len(sabados)
     
-    # Aplicando Filtros de Mês e Discipulador
     df_mes_f = st.session_state.df_freq[
         (st.session_state.df_freq["Mês"] == mes_sel) & 
         (st.session_state.df_freq["Discipulador"].isin(disc_filtro))
@@ -119,7 +127,9 @@ with tab1:
         cols_me = [f"S{i}_ME" for i in range(1, n_sab+1)]
         cols_fa = [f"S{i}_FA" for i in range(1, n_sab+1)]
         cols_vi = [f"S{i}_VI" for i in range(1, n_sab+1)]
-        me = int(df_filter[cols_me].sum().sum()); fa = int(df_filter[cols_fa].sum().sum()); vi = int(df_filter[cols_vi].sum().sum())
+        me = int(df_filter[cols_me].sum().sum())
+        fa = int(df_filter[cols_fa].sum().sum())
+        vi = int(df_filter[cols_vi].sum().sum())
         m1, m2, m3, m4 = st.columns(4)
         with m1: st.markdown(f'<div class="metric-card"><span class="type-label">{titulo_tipo}</span><p class="metric-label">Membros</p><p class="metric-value">{me}</p></div>', unsafe_allow_html=True)
         with m2: st.markdown(f'<div class="metric-card"><span class="type-label">{titulo_tipo}</span><p class="metric-label">Freq. Ativa</p><p class="metric-value">{fa}</p></div>', unsafe_allow_html=True)
@@ -158,19 +168,19 @@ with tab1:
                 for d in disc_filtro:
                     for t in TIPOS:
                         cols = [f"S{i}_{ind}" for i in range(1, 6) for ind in ["ME", "FA", "VI"]]
-                        total = df_all_f[(df_all_f["Mês"] == m) & (df_all_f["Discipulador"] == d) & (df_all_f["Tipo"] == t)][cols].sum().sum()
-                        l_evo.append({"Mês": m, "Discipulador": d, "Tipo": t, "Média": round(total/n_s, 1) if n_s > 0 else 0})
+                        total_val = df_all_f[(df_all_f["Mês"] == m) & (df_all_f["Discipulador"] == d) & (df_all_f["Tipo"] == t)][cols].sum().sum()
+                        l_evo.append({"Mês": m, "Discipulador": d, "Tipo": t, "Média": round(total_val/n_s, 1) if n_s > 0 else 0})
             if l_evo:
                 df_evo = pd.DataFrame(l_evo)
                 df_evo["Mês"] = pd.Categorical(df_evo["Mês"], categories=janela, ordered=True)
                 st.plotly_chart(px.line(df_evo, x="Mês", y="Média", color="Discipulador", facet_row="Tipo", markers=True, title="Evolução Mensal").update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="white", height=400), use_container_width=True)
 
-    # Tabela de preenchimento (Rodapé)
+    # Tabela de Edição (Rodapé)
     st.markdown('<div class="edit-section">', unsafe_allow_html=True)
     st.markdown("### 📝 Lançamento de Dados (Frequência)")
     modo_edicao = st.toggle("Habilitar Tabela para Edição", value=False)
     
-    conf_f = {"Mês": None, "Discipulador": st.column_config.Column(disabled=True, width="medium"), "Tipo": st.column_config.Column(disabled=True)}
+    conf_f = {"Mês": None, "Discipulador": st.column_config.Column(disabled=True), "Tipo": st.column_config.Column(disabled=True)}
     for i in range(1, 6):
         if i <= n_sab:
             conf_f[f"S{i}_ME"] = st.column_config.NumberColumn(f"{sabados[i-1]}|ME")
@@ -189,7 +199,9 @@ with tab1:
                     (st.session_state.df_freq["Tipo"] == row["Tipo"])
                 ].index
                 st.session_state.df_freq.loc[idx, :] = row.values
-            st.session_state.df_freq.to_csv(ARQUIVO_FREQ, index=False); st.success("Salvo!"); st.rerun()
+            st.session_state.df_freq.to_csv(ARQUIVO_FREQ, index=False)
+            st.success("Salvo!")
+            st.rerun()
     else:
         st.dataframe(df_mes_f, column_config=conf_f, use_container_width=True, hide_index=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -216,7 +228,6 @@ if is_admin:
         st.markdown("### ⚠️ Verificação de Pendências")
         mes_pendencia = st.selectbox("Selecione o Mês para verificar:", MESES_ORDEM[:7], index=max(0, mes_atual_numero-2))
         
-        # CORREÇÃO DO ERRO: Mudamos "Status" para "Pago"
         df_pendentes = st.session_state.df[(st.session_state.df["Mês"] == mes_pendencia) & (st.session_state.df["Pago"] == "Não")].copy()
         
         idx_selecionado = MESES_ORDEM.index(mes_pendencia) + 1
@@ -225,7 +236,7 @@ if is_admin:
         
         if not df_pendentes.empty:
             st.warning(f"Existem {len(df_pendentes)} líderes pendentes em {mes_pendencia}:")
-            st.table(df_pendentes[["Líder", "Pago"]]) # Corrigido para "Pago"
+            st.table(df_pendentes[["Líder", "Pago"]])
         else:
             st.success(f"✅ Todos os líderes contribuíram em {mes_pendencia}!")
 
@@ -233,9 +244,16 @@ if is_admin:
         st.markdown("### 📝 Gestão de Dízimos")
         m_l = st.selectbox("Mês para Lançamento:", MESES_ORDEM[:7], key="admin_mes")
         df_ed_diz = st.data_editor(st.session_state.df[st.session_state.df["Mês"] == m_l], use_container_width=True, hide_index=True,
-            column_config={"Mês": None, "Líder": st.column_config.Column(disabled=True), "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f"), "Pago": st.column_config.SelectboxColumn("Status", options=["Sim", "Não"])})
+            column_config={
+                "Mês": None, 
+                "Líder": st.column_config.Column(disabled=True), 
+                "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f"), 
+                "Pago": st.column_config.SelectboxColumn("Status", options=["Sim", "Não"])
+            })
         
         if st.button("💾 Salvar Dízimos"):
             idx = st.session_state.df[st.session_state.df["Mês"] == m_l].index
             st.session_state.df.loc[idx, ["Valor", "Pago"]] = df_ed_diz[["Valor", "Pago"]].values
-            st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False); st.success("Salvo!"); st.rerun()
+            st.session_state.df.to_csv(ARQUIVO_DIZIMOS, index=False)
+            st.success("Salvo!")
+            st.rerun()
